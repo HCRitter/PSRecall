@@ -1,15 +1,28 @@
 function Show-PSRecallSaveDialog {
     [CmdletBinding()]
-    param ([string]$SuggestedFileName = 'RecoveredSession.ps1')
+    param (
+        [string]$SuggestedFileName = 'RecoveredSession.ps1',
+        [string]$Filter = 'PowerShell script (*.ps1)|*.ps1',
+        [string]$DefaultExtension = '.ps1'
+    )
 
     $dialogScript = {
         Add-Type -AssemblyName PresentationFramework
         $dialog = [Microsoft.Win32.SaveFileDialog]::new()
-        $dialog.Title = 'Export PSRecall script'; $dialog.Filter = 'PowerShell script (*.ps1)|*.ps1'
-        $dialog.DefaultExt = '.ps1'; $dialog.AddExtension = $true; $dialog.OverwritePrompt = $true
-        $dialog.FileName = $GuiSuggestedFileName
-        if ($dialog.ShowDialog()) { $dialog.FileName }
+        $dialog.Filter = $GuiFilter
+        $dialog.DefaultExt = $GuiExtension
+        $dialog.FileName = $GuiFileName
+        $dialog.AddExtension = $true
+        if ($dialog.ShowDialog()) {
+            $dialog.FileName
+        }
     }
-    @(Invoke-PSRecallStaRunspace -ScriptBlock $dialogScript -Variables @{ GuiSuggestedFileName = $SuggestedFileName }) |
+
+    $variables = @{
+        GuiFileName  = $SuggestedFileName
+        GuiFilter    = $Filter
+        GuiExtension = $DefaultExtension
+    }
+    @(Invoke-PSRecallStaRunspace -ScriptBlock $dialogScript -Variables $variables) |
         Select-Object -First 1
 }

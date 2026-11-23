@@ -1,63 +1,73 @@
 function Export-PSRecall {
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Low', DefaultParameterSetName = 'DirectLast')]
+    [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'Pipeline')]
     param (
         [Parameter(ValueFromPipeline, ParameterSetName = 'Pipeline')][object]$InputObject,
         [string]$Path,
-        [Parameter(ParameterSetName = 'DirectLast')][ValidateRange(1, [int]::MaxValue)][int]$Last = 20,
-        [Parameter(Mandatory, ParameterSetName = 'DirectAll')][switch]$All,
-        [Parameter(Mandatory, ParameterSetName = 'DirectIdRange')][long]$FromId,
-        [Parameter(Mandatory, ParameterSetName = 'DirectIdRange')][long]$ToId,
-        [Parameter(ParameterSetName = 'DirectLast')][Parameter(ParameterSetName = 'DirectAll')][Parameter(ParameterSetName = 'DirectIdRange')][switch]$SuccessfulOnly,
+        [ValidateSet('PowerShell', 'Text', 'Markdown')][string]$Format = 'PowerShell',
+        [string]$Title = 'PSRecall Session Export',
         [switch]$ResolveAliases,
         [switch]$IncludeOutput,
         [switch]$IncludeSensitiveMetadata,
         [switch]$Force
     )
 
-    begin { $pipelineEntries = [System.Collections.Generic.List[object]]::new() }
+    begin { $items = [System.Collections.Generic.List[object]]::new() }
     process {
-        if ($PSCmdlet.ParameterSetName -eq 'Pipeline') { $pipelineEntries.Add(($InputObject | ConvertTo-PSRecallEntry)) }
+        if ($null -ne $InputObject) {
+            $items.Add(($InputObject | ConvertTo-PSRecallEntry))
+        }
     }
     end {
-        if ($PSCmdlet.ParameterSetName -eq 'Pipeline') {
-            $selection = @($pipelineEntries | Sort-Object Id -Unique)
-            $description = 'Entries received through the pipeline'
+        if ($items.Count -eq 0) { throw 'No history entries supplied.' }
+        $selection = @($items | Sort-Object -Property Id -Unique)
+        $formats = @{
+            PowerShell = @{ Extension = '.ps1'; File = 'RecoveredSession.ps1'; Filter = 'PowerShell script (*.ps1)|*.ps1' }
+            Text       = @{ Extension = '.txt'; File = 'PSRecall-Session.txt'; Filter = 'Text file (*.txt)|*.txt' }
+            Markdown   = @{ Extension = '.md'; File = 'PSRecall-Session.md'; Filter = 'Markdown file (*.md)|*.md' }
         }
-        else {
-            $parameters = @{ SuccessfulOnly = $SuccessfulOnly }
-            switch ($PSCmdlet.ParameterSetName) {
-                'DirectAll' { $parameters.All = $true; $description = 'All available history entries' }
-                'DirectIdRange' { $parameters.FromId = $FromId; $parameters.ToId = $ToId; $description = "Inclusive history ID range $FromId-$ToId" }
-                default { $parameters.Last = $Last; $description = "Last $Last history entries" }
-            }
-            $selection = @(Get-PSRecallSelection @parameters | ConvertTo-PSRecallEntry)
+        $specification = $formats[$Format]
+
+        if (-not $Path) {
+            $Path = Show-PSRecallSaveDialog -SuggestedFileName $specification.File -Filter $specification.Filter -DefaultExtension $specification.Extension
+            if (-not $Path) { return }
         }
-        if (-not $selection.Count) { throw 'No history entries were supplied or matched.' }
-        if (-not $Path) { $Path = Show-PSRecallSaveDialog; if (-not $Path) { return } }
+
         $extension = [IO.Path]::GetExtension($Path)
-        if ($extension -and $extension -ne '.ps1') { throw 'Path must use the .ps1 extension.' }
-        if (-not $extension) { $Path = "$Path.ps1" }
+        if (-not $extension) { $Path += $specification.Extension }
+        elseif ($extension -ne $specification.Extension) { throw "Format '$Format' requires '$($specification.Extension)'." }
+
         $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
-        $parentPath = Split-Path $resolvedPath -Parent
-        if (-not (Test-Path $parentPath -PathType Container)) { throw "Directory does not exist: $parentPath" }
-        if ((Test-Path $resolvedPath) -and -not $Force) { throw "File exists: $resolvedPath. Use -Force." }
+        if ((Test-Path -LiteralPath $resolvedPath) -and -not $Force) { throw "File exists: $resolvedPath. Use -Force." }
 
-        $scriptParameters = @{
-            History = $selection; SelectionDescription = $description
+        $data = ConvertTo-PSRecallExportData -History $selection -ResolveAliases:$ResolveAliases
+        foreach ($warning in $data.Warnings) { Write-Warning $warning }
+        $presentationParameters = @{
+            Entries                  = $data.Entries
+            SelectionDescription     = 'Entries received through the pipeline'
             IncludeSensitiveMetadata = $IncludeSensitiveMetadata
-            ResolveAliases = $ResolveAliases; IncludeOutput = $IncludeOutput
+            IncludeOutput            = $IncludeOutput
+            Title                    = $Title
         }
-        $result = ConvertTo-PSRecallScript @scriptParameters
-        foreach ($warning in $result.Warnings) { Write-Warning $warning }
 
-        if ($PSCmdlet.ShouldProcess($resolvedPath, "Export $($selection.Count) history entries")) {
+        $presentation = switch ($Format) {
+            'Text' { ConvertTo-PSRecallText @presentationParameters }
+            'Markdown' { ConvertTo-PSRecallMarkdown @presentationParameters }
+            default {
+                [void]$presentationParameters.Remove('Title')
+                ConvertTo-PSRecallScript @presentationParameters
+            }
+        }
+
+        if ($PSCmdlet.ShouldProcess($resolvedPath, "Export as $Format")) {
             $encoding = if ($PSVersionTable.PSVersion.Major -ge 6) { 'utf8NoBOM' } else { 'utf8' }
-            Set-Content -LiteralPath $resolvedPath -Value $result.Content -Encoding $encoding -Force
+            Set-Content -LiteralPath $resolvedPath -Value $presentation.Content -Encoding $encoding -Force
             [pscustomobject]@{
-                PSTypeName = 'PSRecall.ExportResult'; Path = $resolvedPath; EntryCount = $selection.Count
-                FirstHistoryId = $selection[0].Id; LastHistoryId = $selection[-1].Id
-                ResolvedAliasCount = $result.ResolvedAliasCount; ParseErrorCount = $result.ParseErrorCount
-                OutputEntryCount = $result.OutputEntryCount; ExportedAt = Get-Date
+                Path               = $resolvedPath
+                Format             = $Format
+                EntryCount         = $selection.Count
+                ResolvedAliasCount = $data.ResolvedAliasCount
+                ParseErrorCount    = $data.ParseErrorCount
+                OutputEntryCount   = $presentation.OutputEntryCount
             }
         }
     }

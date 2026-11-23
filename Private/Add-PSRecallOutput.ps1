@@ -12,11 +12,11 @@ function Add-PSRecallOutput {
     )
 
     $bufferLines = @(Get-PSRecallBufferLines)
-    $allEntries = @($AllHistory | Sort-Object -Property Id)
+    $historyEntries = @($AllHistory | Sort-Object -Property Id)
     $markers = [System.Collections.Generic.List[object]]::new()
     $searchStart = 0
 
-    foreach ($entry in $allEntries) {
+    foreach ($entry in $historyEntries) {
         $commandLines = @(
             ([string]$entry.CommandLine -split "`r?`n") |
                 ForEach-Object { $_.Trim() } |
@@ -27,45 +27,53 @@ function Add-PSRecallOutput {
             continue
         }
 
-        $firstCommandLine = $commandLines[0]
-        $matchIndex = -1
-
+        $commandStart = -1
         for ($lineIndex = $searchStart; $lineIndex -lt $bufferLines.Count; $lineIndex++) {
-            if ($bufferLines[$lineIndex].IndexOf($firstCommandLine, [StringComparison]::Ordinal) -ge 0) {
-                $matchIndex = $lineIndex
+            if ($bufferLines[$lineIndex].IndexOf($commandLines[0], [StringComparison]::Ordinal) -ge 0) {
+                $commandStart = $lineIndex
                 break
             }
         }
 
-        if ($matchIndex -lt 0) {
+        if ($commandStart -lt 0) {
             continue
         }
 
-        $commandEndIndex = $matchIndex
-        $nextSearchIndex = $matchIndex + 1
+        $commandEnd = $commandStart
+        $continuationSearchStart = $commandStart + 1
+        $completeCommandFound = $true
 
         for ($commandLineIndex = 1; $commandLineIndex -lt $commandLines.Count; $commandLineIndex++) {
-            $continuation = $commandLines[$commandLineIndex]
-            for ($lineIndex = $nextSearchIndex; $lineIndex -lt $bufferLines.Count; $lineIndex++) {
-                if ($bufferLines[$lineIndex].IndexOf($continuation, [StringComparison]::Ordinal) -ge 0) {
-                    $commandEndIndex = $lineIndex
-                    $nextSearchIndex = $lineIndex + 1
+            $continuationMatch = -1
+            for ($lineIndex = $continuationSearchStart; $lineIndex -lt $bufferLines.Count; $lineIndex++) {
+                if ($bufferLines[$lineIndex].IndexOf($commandLines[$commandLineIndex], [StringComparison]::Ordinal) -ge 0) {
+                    $continuationMatch = $lineIndex
                     break
                 }
             }
+
+            if ($continuationMatch -lt 0) {
+                $completeCommandFound = $false
+                break
+            }
+
+            $commandEnd = $continuationMatch
+            $continuationSearchStart = $continuationMatch + 1
+        }
+
+        if (-not $completeCommandFound) {
+            continue
         }
 
         $markers.Add([pscustomobject]@{
             Id           = [long]$entry.Id
-            CommandStart = $matchIndex
-            OutputStart  = $commandEndIndex + 1
+            CommandStart = $commandStart
+            CommandEnd   = $commandEnd
+            OutputStart  = $commandEnd + 1
         })
-        $searchStart = $commandEndIndex + 1
+        $searchStart = $commandEnd + 1
     }
 
-    # The active Get-PSRecall command is already present in the terminal buffer, but it is not yet
-    # part of Get-History. Locate the LAST occurrence of that invocation. Searching backwards avoids
-    # matching an older identical Get-PSRecall command that is already present in the scrollback.
     $invocationBoundary = $bufferLines.Count
     $invocationLines = @(
         ($CurrentInvocation -split "`r?`n") |
@@ -74,9 +82,8 @@ function Add-PSRecallOutput {
     )
 
     if ($invocationLines.Count -gt 0) {
-        $firstInvocationLine = $invocationLines[0]
         for ($lineIndex = $bufferLines.Count - 1; $lineIndex -ge 0; $lineIndex--) {
-            if ($bufferLines[$lineIndex].IndexOf($firstInvocationLine, [StringComparison]::Ordinal) -ge 0) {
+            if ($bufferLines[$lineIndex].IndexOf($invocationLines[0], [StringComparison]::Ordinal) -ge 0) {
                 $invocationBoundary = $lineIndex
                 break
             }

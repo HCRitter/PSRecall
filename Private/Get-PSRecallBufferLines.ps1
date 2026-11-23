@@ -9,7 +9,7 @@ function Get-PSRecallBufferLines {
         $cursorPosition = $rawUi.CursorPosition
 
         if ($bufferSize.Width -le 0 -or $bufferSize.Height -le 0) {
-            throw 'The current host reported an invalid terminal buffer size.'
+            throw 'The current host reported an invalid buffer size.'
         }
 
         $bottom = [Math]::Min($cursorPosition.Y, $bufferSize.Height - 1)
@@ -30,7 +30,7 @@ function Get-PSRecallBufferLines {
             $lines.Add((-join $characters).TrimEnd())
         }
 
-        return @($lines)
+        @($lines)
     }
     catch {
         throw "The current PowerShell host does not expose a readable RawUI terminal buffer: $($_.Exception.Message)"

@@ -16,6 +16,7 @@ function Get-PSRecallSelection {
         [ValidateRange(1, [long]::MaxValue)]
         [long]$ToId,
 
+        [Parameter()]
         [switch]$SuccessfulOnly
     )
 
@@ -24,14 +25,23 @@ function Get-PSRecallSelection {
     }
 
     $history = @(Get-History -ErrorAction Stop | Sort-Object -Property Id)
-    $selection = switch ($PSCmdlet.ParameterSetName) {
-        'All' { $history }
-        'IdRange' { @($history | Where-Object { $_.Id -ge $FromId -and $_.Id -le $ToId }) }
-        default { @($history | Select-Object -Last $Last) }
+
+    switch ($PSCmdlet.ParameterSetName) {
+        'All' {
+            $selection = $history
+        }
+        'IdRange' {
+            $selection = @(
+                $history | Where-Object { $_.Id -ge $FromId -and $_.Id -le $ToId }
+            )
+        }
+        default {
+            $selection = @($history | Select-Object -Last $Last)
+        }
     }
 
     if ($SuccessfulOnly) {
-        $selection = @($selection | Where-Object ExecutionStatus -eq 'Completed')
+        $selection = @($selection | Where-Object { $_.ExecutionStatus -eq 'Completed' })
     }
 
     $selection

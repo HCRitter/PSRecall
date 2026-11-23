@@ -6,27 +6,27 @@ function ConvertTo-PSRecallEntry {
     )
 
     process {
-        foreach ($propertyName in 'Id', 'ExecutionStatus', 'CommandLine') {
+        foreach ($propertyName in @('Id', 'ExecutionStatus', 'CommandLine')) {
             if ($null -eq $InputObject.PSObject.Properties[$propertyName]) {
                 throw "Pipeline input must contain an '$propertyName' property."
             }
         }
 
-        $startExecution = if ($InputObject.PSObject.Properties['StartExecution']) {
+        $startExecution = if ($null -ne $InputObject.PSObject.Properties['StartExecution']) {
             $InputObject.StartExecution
         }
         else {
             $InputObject.StartExecutionTime
         }
 
-        $endExecution = if ($InputObject.PSObject.Properties['EndExecution']) {
+        $endExecution = if ($null -ne $InputObject.PSObject.Properties['EndExecution']) {
             $InputObject.EndExecution
         }
         else {
             $InputObject.EndExecutionTime
         }
 
-        $output = if ($InputObject.PSObject.Properties['Output']) {
+        $output = if ($null -ne $InputObject.PSObject.Properties['Output']) {
             [string]$InputObject.Output
         }
         else {
@@ -39,7 +39,12 @@ function ConvertTo-PSRecallEntry {
             ExecutionStatus = [string]$InputObject.ExecutionStatus
             StartExecution  = $startExecution
             EndExecution    = $endExecution
-            Duration        = if ($startExecution -and $endExecution) { $endExecution - $startExecution } else { $null }
+            Duration        = if ($startExecution -and $endExecution) {
+                $endExecution - $startExecution
+            }
+            else {
+                $null
+            }
             CommandLine     = [string]$InputObject.CommandLine
             Output          = $output
         }

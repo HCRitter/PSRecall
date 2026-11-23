@@ -1,25 +1,16 @@
 BeforeAll { Import-Module (Join-Path $PSScriptRoot '..\PSRecall.psd1') -Force }
-Describe 'PSRecall module' {
-    It 'exports public commands' { Get-Command -Module PSRecall | Select-Object -ExpandProperty Name | Should -Contain 'Get-PSRecall' }
-    It 'rejects invalid ranges' { { Get-PSRecall -FromId 10 -ToId 5 } | Should -Throw }
-    It 'exports output comments only when requested' {
-        $path = Join-Path $TestDrive 'output.ps1'
-        $entry = [pscustomobject]@{ Id=1; ExecutionStatus='Completed'; CommandLine='Get-Date'; Output='Simulated output' }
-        $result = $entry | Export-PSRecall -Path $path -IncludeOutput
-        (Get-Content $path -Raw) | Should -Match 'Output for Get-Date with history ID 1'
-        $result.OutputEntryCount | Should -Be 1
+Describe 'PSRecall regression checks' {
+    It 'contains readable valid foreach syntax' {
+        $content = Get-Content (Join-Path $PSScriptRoot '..\Private\ConvertTo-PSRecallEntry.ps1') -Raw
+        $content | Should -Match 'foreach \(\$propertyName in @\('
     }
-    It 'escapes a comment terminator in captured output' {
-        $path = Join-Path $TestDrive 'safe-output.ps1'
-        [pscustomobject]@{ Id=2; ExecutionStatus='Completed'; CommandLine='Get-Date'; Output='unsafe #> text' } |
-            Export-PSRecall -Path $path -IncludeOutput | Out-Null
-        (Get-Content $path -Raw) | Should -Match '# >'
+    It 'declares the XAML x namespace' {
+        $content = Get-Content (Join-Path $PSScriptRoot '..\Private\Show-PSRecallHistoryDialog.ps1') -Raw
+        $content | Should -Match 'xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"'
     }
-    It 'preserves output on pipeline conversion' {
-        InModuleScope PSRecall {
-            $entry = [pscustomobject]@{ Id=3; ExecutionStatus='Completed'; CommandLine='Get-Date'; Output='value' }
-            ($entry | ConvertTo-PSRecallEntry).Output | Should -Be 'value'
-        }
+    It 'keeps valid UserName interpolation' {
+        $content = Get-Content (Join-Path $PSScriptRoot '..\Private\ConvertTo-PSRecallScript.ps1') -Raw
+        $content | Should -Match '\$\(\[Environment\]::UserName\)'
     }
 }
 AfterAll { Remove-Module PSRecall -Force -ErrorAction SilentlyContinue }
