@@ -1,6 +1,6 @@
 function ConvertTo-PSRecallScript {
     [CmdletBinding()]
-    [OutputType([string])]
+    [OutputType('PSRecall.ScriptConversionResult')]
     param (
         [Parameter(Mandatory)]
         [object[]]$History,
@@ -9,13 +9,36 @@ function ConvertTo-PSRecallScript {
         [string]$SelectionDescription,
 
         [Parameter()]
-        [switch]$IncludeSensitiveMetadata
+        [switch]$IncludeSensitiveMetadata,
+
+        [Parameter()]
+        [switch]$ResolveAliases
     )
 
     $orderedHistory = @($History | Sort-Object -Property Id)
-    $firstId = $orderedHistory[0].Id
-    $lastId = $orderedHistory[-1].Id
-    $generatedAt = Get-Date -Format 'yyyy-MM-dd HH:mm:ss K'
+    $resolvedAliasCount = 0
+    $parseErrorCount = 0
+    $warnings = [System.Collections.Generic.List[string]]::new()
+
+    $commands = foreach ($entry in $orderedHistory) {
+        $commandLine = [string]$entry.CommandLine
+
+        if ($ResolveAliases) {
+            $resolution = Resolve-PSRecallAlias -CommandLine $commandLine
+            $commandLine = $resolution.CommandLine
+            $resolvedAliasCount += $resolution.ResolvedAliasCount
+            $parseErrorCount += $resolution.ParseErrorCount
+
+            foreach ($warning in $resolution.Warnings) {
+                $warnings.Add("History ID $($entry.Id): $warning")
+            }
+        }
+
+        [pscustomobject]@{
+            Entry       = $entry
+            CommandLine = $commandLine
+        }
+    }
 
     $header = [System.Collections.Generic.List[string]]::new()
     $header.Add('#requires -Version 5.1')
@@ -25,12 +48,13 @@ function ConvertTo-PSRecallScript {
     $header.Add('    Reconstructed PowerShell commands exported from the current session by PSRecall.')
     $header.Add('')
     $header.Add('.NOTES')
-    $header.Add("    Generated: $generatedAt")
+    $header.Add("    Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss K')")
     $header.Add("    PowerShell: $($PSVersionTable.PSVersion)")
     $header.Add("    Edition: $($PSVersionTable.PSEdition)")
     $header.Add("    Selection: $SelectionDescription")
-    $header.Add("    History IDs: $firstId-$lastId")
+    $header.Add("    History IDs: $($orderedHistory[0].Id)-$($orderedHistory[-1].Id)")
     $header.Add("    Exported entries: $($orderedHistory.Count)")
+    $header.Add("    Aliases resolved: $resolvedAliasCount")
 
     if ($IncludeSensitiveMetadata) {
         $header.Add("    Computer: $env:COMPUTERNAME")
@@ -48,11 +72,17 @@ function ConvertTo-PSRecallScript {
     $header.Add('')
 
     $body = [System.Collections.Generic.List[string]]::new()
-    foreach ($entry in $orderedHistory) {
-        $body.Add("# History ID: $($entry.Id) | Status: $($entry.ExecutionStatus)")
-        $body.Add(([string]$entry.CommandLine).TrimEnd())
+    foreach ($item in $commands) {
+        $body.Add("# History ID: $($item.Entry.Id) | Status: $($item.Entry.ExecutionStatus)")
+        $body.Add($item.CommandLine.TrimEnd())
         $body.Add('')
     }
 
-    return (@($header) + @($body)) -join [Environment]::NewLine
+    [pscustomobject]@{
+        PSTypeName         = 'PSRecall.ScriptConversionResult'
+        Content            = (@($header) + @($body)) -join [Environment]::NewLine
+        ResolvedAliasCount = $resolvedAliasCount
+        ParseErrorCount    = $parseErrorCount
+        Warnings           = @($warnings)
+    }
 }

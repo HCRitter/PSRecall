@@ -7,7 +7,9 @@ function Export-PSRecall {
         Accepts entries from Get-PSRecall through the pipeline. If Path is omitted on Windows, a
         native Save File dialog is displayed. On macOS and Linux, Path is required.
 
-        Export-PSRecall can still select directly from Get-History when no pipeline input is used.
+        Export-PSRecall can also select directly from Get-History when no pipeline input is used.
+        ResolveAliases uses the PowerShell AST to replace aliases in command positions with their
+        currently resolved cmdlet, function, or filter names.
 
     .EXAMPLE
         Get-PSRecall -Gui | Export-PSRecall
@@ -16,7 +18,10 @@ function Export-PSRecall {
         Get-PSRecall -All | Export-PSRecall -Path .\RecoveredSession.ps1
 
     .EXAMPLE
-        Export-PSRecall -Last 20 -SuccessfulOnly -Path .\WorkingCommands.ps1
+        Get-PSRecall -All -Gui | Export-PSRecall -ResolveAliases
+
+    .EXAMPLE
+        Export-PSRecall -Last 20 -SuccessfulOnly -Path .\WorkingCommands.ps1 -ResolveAliases
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Low', DefaultParameterSetName = 'DirectLast')]
     [OutputType('PSRecall.ExportResult')]
@@ -50,6 +55,9 @@ function Export-PSRecall {
         [switch]$SuccessfulOnly,
 
         [Parameter()]
+        [switch]$ResolveAliases,
+
+        [Parameter()]
         [switch]$IncludeSensitiveMetadata,
 
         [Parameter()]
@@ -73,7 +81,10 @@ function Export-PSRecall {
             $selectionDescription = 'Entries received through the pipeline'
         }
         else {
-            $selectionParameters = @{ SuccessfulOnly = $SuccessfulOnly }
+            $selectionParameters = @{
+                SuccessfulOnly = $SuccessfulOnly
+            }
+
             switch ($PSCmdlet.ParameterSetName) {
                 'DirectAll' {
                     $selectionParameters.All = $true
@@ -133,14 +144,25 @@ function Export-PSRecall {
             History                  = $selection
             SelectionDescription     = $selectionDescription
             IncludeSensitiveMetadata = $IncludeSensitiveMetadata
+            ResolveAliases           = $ResolveAliases
         }
-        $content = ConvertTo-PSRecallScript @scriptParameters
+        $scriptResult = ConvertTo-PSRecallScript @scriptParameters
+
+        foreach ($warning in $scriptResult.Warnings) {
+            Write-Warning $warning
+        }
 
         if ($PSCmdlet.ShouldProcess($resolvedPath, "Export $($selection.Count) history entries")) {
-            $encoding = if ($PSVersionTable.PSVersion.Major -ge 6) { 'utf8NoBOM' } else { 'utf8' }
+            $encoding = if ($PSVersionTable.PSVersion.Major -ge 6) {
+                'utf8NoBOM'
+            }
+            else {
+                'utf8'
+            }
+
             $setContentParameters = @{
                 LiteralPath = $resolvedPath
-                Value       = $content
+                Value       = $scriptResult.Content
                 Encoding    = $encoding
                 Force       = $true
                 ErrorAction = 'Stop'
@@ -149,12 +171,14 @@ function Export-PSRecall {
 
             $file = Get-Item -LiteralPath $resolvedPath -ErrorAction Stop
             [pscustomobject]@{
-                PSTypeName     = 'PSRecall.ExportResult'
-                Path           = $file.FullName
-                EntryCount     = $selection.Count
-                FirstHistoryId = $selection[0].Id
-                LastHistoryId  = $selection[-1].Id
-                ExportedAt     = Get-Date
+                PSTypeName         = 'PSRecall.ExportResult'
+                Path               = $file.FullName
+                EntryCount         = $selection.Count
+                FirstHistoryId     = $selection[0].Id
+                LastHistoryId      = $selection[-1].Id
+                ResolvedAliasCount = $scriptResult.ResolvedAliasCount
+                ParseErrorCount    = $scriptResult.ParseErrorCount
+                ExportedAt         = Get-Date
             }
         }
     }

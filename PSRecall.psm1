@@ -1,14 +1,8 @@
-$privatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
 $publicPath = Join-Path -Path $PSScriptRoot -ChildPath 'Public'
+$privatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
 
-$importParameters = @{
-    Filter      = '*.ps1'
-    File        = $true
-    ErrorAction = 'Stop'
-}
-
-$privateScripts = @(Get-ChildItem -Path $privatePath @importParameters | Sort-Object -Property Name)
-$publicScripts = @(Get-ChildItem -Path $publicPath @importParameters | Sort-Object -Property Name)
+$privateScripts = Get-ChildItem -Path $privatePath -Filter '*.ps1' -File -ErrorAction Stop
+$publicScripts = Get-ChildItem -Path $publicPath -Filter '*.ps1' -File -ErrorAction Stop
 
 foreach ($script in @($privateScripts) + @($publicScripts)) {
     try {

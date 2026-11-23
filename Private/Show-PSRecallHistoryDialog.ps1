@@ -123,7 +123,6 @@ function Show-PSRecallHistoryDialog {
         $useSelectionButton = $window.FindName('UseSelectionButton')
 
         $historyGrid.ItemsSource = @($GuiHistory)
-
         $selectAllButton.Add_Click({ $historyGrid.SelectAll() })
         $clearButton.Add_Click({ $historyGrid.UnselectAll() })
         $cancelButton.Add_Click({
