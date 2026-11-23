@@ -1,6 +1,6 @@
 # PSRecall Design
 
-> Architecture and design documentation for PSRecall 0.7.2
+> Architecture and design documentation for PSRecall 1.0.1
 
 ## 1. Purpose
 
@@ -717,3 +717,8 @@ PSRecall uses a deliberately layered architecture:
 - Persistence is centralized in `Export-PSRecall`.
 
 This separation keeps the module useful for interactive troubleshooting, scripted automation, reusable PowerShell generation, and technical documentation without turning the project into a continuous recorder or a general-purpose terminal framework.
+
+
+### 24. RawUI leading-output fallback
+
+A large command can produce enough terminal output that its prompt line leaves the `RawUI` buffer before a following command is recalled. When the first visible command marker has exactly one earlier unmatched history entry, PSRecall 1.0.1 assigns the leading readable buffer region to that single entry. If two or more earlier commands are unmatched, PSRecall does not guess because the output boundary between those commands cannot be reconstructed reliably.

@@ -355,3 +355,12 @@ Invoke-Pester .\Tests\PSRecall.Tests.ps1
 PSRecall is designed for the moment after an interactive troubleshooting session: recover what happened, keep what was useful, and turn it into something reusable.
 
 **EXPORT WHAT WORKED.**
+
+
+### GUI themes
+
+PSRecall 1.0 supports `System`, `Light`, and `Dark` themes in the Windows WPF selector. `System` is the default and reads the Windows application theme once when the dialog opens. The theme can be changed while the dialog remains open. Theme selection affects presentation only and does not change recall objects, output reconstruction, export options, or generated files.
+
+### PSRecall 1.0.1 GUI and output refinements
+
+PSRecall 1.0.1 completes the dark-theme treatment for format and theme selectors and gives the **Export** action a clear primary visual style. Output reconstruction also includes a conservative fallback for large commands whose command prompt has already scrolled outside the `RawUI` buffer while the command output is still readable. The fallback is used only when exactly one unmatched history entry precedes the first command marker that is still visible; ambiguous multi-command gaps are intentionally left unresolved.

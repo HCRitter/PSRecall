@@ -14,6 +14,7 @@ function Add-PSRecallOutput {
     $bufferLines = @(Get-PSRecallBufferLines)
     $historyEntries = @($AllHistory | Sort-Object -Property Id)
     $markers = [System.Collections.Generic.List[object]]::new()
+    $matchedHistoryIds = [System.Collections.Generic.HashSet[long]]::new()
     $searchStart = 0
 
     foreach ($entry in $historyEntries) {
@@ -71,6 +72,7 @@ function Add-PSRecallOutput {
             CommandEnd   = $commandEnd
             OutputStart  = $commandEnd + 1
         })
+        [void]$matchedHistoryIds.Add([long]$entry.Id)
         $searchStart = $commandEnd + 1
     }
 
@@ -118,6 +120,39 @@ function Add-PSRecallOutput {
         }
         else {
             $null
+        }
+    }
+
+    # Windows Terminal can expose less scrollback through RawUI than the terminal itself displays.
+    # A large command such as Get-ChildItem can therefore leave its output in the buffer while its
+    # prompt line has already fallen outside the readable RawUI range. If exactly one unmatched
+    # history entry immediately precedes the first matched command, attribute the leading buffer
+    # content to that entry. Multiple missing commands remain ambiguous and are deliberately left
+    # unresolved rather than guessing which command produced which output.
+    if ($markers.Count -gt 0 -and $markers[0].CommandStart -gt 0) {
+        $firstMatchedId = [long]$markers[0].Id
+        $precedingUnmatchedEntries = @(
+            $historyEntries |
+                Where-Object {
+                    $_.Id -lt $firstMatchedId -and
+                    -not $matchedHistoryIds.Contains([long]$_.Id)
+                }
+        )
+
+        if ($precedingUnmatchedEntries.Count -eq 1) {
+            $leadingOutputEnd = $markers[0].CommandStart - 1
+            $leadingLines = @($bufferLines[0..$leadingOutputEnd])
+
+            while ($leadingLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace($leadingLines[0])) {
+                $leadingLines = @($leadingLines | Select-Object -Skip 1)
+            }
+            while ($leadingLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace($leadingLines[-1])) {
+                $leadingLines = @($leadingLines | Select-Object -First ($leadingLines.Count - 1))
+            }
+
+            if ($leadingLines.Count -gt 0) {
+                $outputById[[long]$precedingUnmatchedEntries[0].Id] = $leadingLines -join [Environment]::NewLine
+            }
         }
     }
 

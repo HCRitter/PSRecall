@@ -45,3 +45,92 @@ Describe 'PSRecall 0.7.2 WPF loading regression check' {
         $content | Should -Match 'Property="ToolTip" Value="\{Binding Output\}"'
     }
 }
+
+
+Describe 'PSRecall 1.0 theme regression checks' {
+    BeforeAll {
+        $dialogPath = Join-Path $PSScriptRoot '..\Private\Show-PSRecallHistoryDialog.ps1'
+        $script:dialogContent = Get-Content -LiteralPath $dialogPath -Raw
+    }
+    It 'provides System Light and Dark theme choices' {
+        $dialogContent | Should -Match '<ComboBoxItem Content="System"'
+        $dialogContent | Should -Match '<ComboBoxItem Content="Light"'
+        $dialogContent | Should -Match '<ComboBoxItem Content="Dark"'
+    }
+    It 'defines dynamic theme resources and system detection' {
+        $dialogContent | Should -Match 'x:Key="WindowBackgroundBrush"'
+        $dialogContent | Should -Match 'x:Key="SelectionBrush"'
+        $dialogContent | Should -Match 'DynamicResource ForegroundBrush'
+        $dialogContent | Should -Match 'AppsUseLightTheme'
+    }
+    It 'does not restore the invalid automatic RowHeight assignment' {
+        $dialogContent | Should -Not -Match 'RowHeight="Auto"'
+    }
+}
+
+Describe 'PSRecall 1.0.1 output and styling regression checks' {
+    It 'recovers leading output when exactly one preceding history command has scrolled out of RawUI' {
+        InModuleScope PSRecall {
+            Mock Get-PSRecallBufferLines {
+                @(
+                    'Directory: C:\Users\example'
+                    'Mode   LastWriteTime   Length Name'
+                    'd----  2026-11-23             Documents'
+                    'PS> get-date'
+                    'Monday, 23 November 2026 14:57:42'
+                    'PS> Get-PSRecall -All -IncludeOutput'
+                )
+            }
+
+            $history = @(
+                [pscustomobject]@{ Id = 1; ExecutionStatus = 'Completed'; CommandLine = 'gci' }
+                [pscustomobject]@{ Id = 2; ExecutionStatus = 'Completed'; CommandLine = 'get-date' }
+            )
+
+            $result = @(
+                Add-PSRecallOutput -AllHistory $history -SelectedHistory $history -CurrentInvocation 'Get-PSRecall -All -IncludeOutput'
+            )
+
+            $result[0].Output | Should -Match 'Directory: C:\Users\example'
+            $result[0].Output | Should -Match 'Documents'
+            $result[1].Output | Should -Be 'Monday, 23 November 2026 14:57:42'
+        }
+    }
+
+    It 'does not guess leading output when multiple history commands are missing from RawUI' {
+        InModuleScope PSRecall {
+            Mock Get-PSRecallBufferLines {
+                @(
+                    'unattributed output'
+                    'PS> get-date'
+                    'Monday'
+                    'PS> Get-PSRecall -All -IncludeOutput'
+                )
+            }
+
+            $history = @(
+                [pscustomobject]@{ Id = 1; ExecutionStatus = 'Completed'; CommandLine = 'gci' }
+                [pscustomobject]@{ Id = 2; ExecutionStatus = 'Completed'; CommandLine = 'Get-Process' }
+                [pscustomobject]@{ Id = 3; ExecutionStatus = 'Completed'; CommandLine = 'get-date' }
+            )
+
+            $result = @(
+                Add-PSRecallOutput -AllHistory $history -SelectedHistory $history -CurrentInvocation 'Get-PSRecall -All -IncludeOutput'
+            )
+
+            $result[0].Output | Should -BeNullOrEmpty
+            $result[1].Output | Should -BeNullOrEmpty
+            $result[2].Output | Should -Be 'Monday'
+        }
+    }
+
+    It 'uses a custom themed ComboBox template and primary Export button' {
+        $dialogPath = Join-Path $PSScriptRoot '..\Private\Show-PSRecallHistoryDialog.ps1'
+        $content = Get-Content -LiteralPath $dialogPath -Raw
+
+        $content | Should -Match '<ControlTemplate TargetType="ComboBox">'
+        $content | Should -Match 'DynamicResource AccentBrush'
+        $content | Should -Match 'PrimaryButtonStyle'
+        $content | Should -Match 'AccentForegroundBrush'
+    }
+}

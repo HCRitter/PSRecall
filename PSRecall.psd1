@@ -1,6 +1,6 @@
 @{
     RootModule        = 'PSRecall.psm1'
-    ModuleVersion     = '0.7.2'
+    ModuleVersion     = '1.0.1'
     GUID              = 'd3985247-ef18-4b71-8fcc-9545e812633b'
     Author            = 'Christian Ritter'
     CompanyName       = 'Community'
@@ -31,7 +31,7 @@
             )
             ProjectUri   = 'https://github.com/HCRitter/PSRecall'
             LicenseUri   = 'https://github.com/HCRitter/PSRecall/blob/main/LICENSE'
-            ReleaseNotes = 'Fixes WPF DataGrid loading by using the default automatic row sizing instead of the invalid RowHeight Auto value, while preserving multiline output rendering and GUI-controlled export.'
+            ReleaseNotes = 'Improves WPF dark-mode styling, adds a themed ComboBox and primary Export action, and recovers leading output when a large command has scrolled its prompt line outside the readable RawUI buffer.'
         }
     }
 }
