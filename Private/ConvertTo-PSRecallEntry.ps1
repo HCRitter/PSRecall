@@ -1,19 +1,47 @@
 function ConvertTo-PSRecallEntry {
     [CmdletBinding()]
-    param([Parameter(Mandatory,ValueFromPipeline)][object]$InputObject)
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [object]$InputObject
+    )
+
     process {
-        foreach ($name in 'Id','ExecutionStatus','CommandLine') {
-            if ($null -eq $InputObject.PSObject.Properties[$name]) { throw "Pipeline input must contain '$name'." }
+        foreach ($propertyName in 'Id', 'ExecutionStatus', 'CommandLine') {
+            if ($null -eq $InputObject.PSObject.Properties[$propertyName]) {
+                throw "Pipeline input must contain an '$propertyName' property."
+            }
         }
-        if ([string]::IsNullOrWhiteSpace([string]$InputObject.CommandLine)) { throw 'CommandLine must not be empty.' }
-        $start = if ($InputObject.PSObject.Properties['StartExecution']) { $InputObject.StartExecution } else { $InputObject.StartExecutionTime }
-        $end = if ($InputObject.PSObject.Properties['EndExecution']) { $InputObject.EndExecution } else { $InputObject.EndExecutionTime }
+
+        $startExecution = if ($InputObject.PSObject.Properties['StartExecution']) {
+            $InputObject.StartExecution
+        }
+        else {
+            $InputObject.StartExecutionTime
+        }
+
+        $endExecution = if ($InputObject.PSObject.Properties['EndExecution']) {
+            $InputObject.EndExecution
+        }
+        else {
+            $InputObject.EndExecutionTime
+        }
+
+        $output = if ($InputObject.PSObject.Properties['Output']) {
+            [string]$InputObject.Output
+        }
+        else {
+            $null
+        }
+
         [pscustomobject]@{
-            PSTypeName='PSRecall.HistoryEntry'; Id=[long]$InputObject.Id
-            ExecutionStatus=[string]$InputObject.ExecutionStatus
-            StartExecution=$start; EndExecution=$end
-            Duration=if ($start -and $end) { $end-$start } else { $null }
-            CommandLine=[string]$InputObject.CommandLine
+            PSTypeName      = 'PSRecall.HistoryEntry'
+            Id              = [long]$InputObject.Id
+            ExecutionStatus = [string]$InputObject.ExecutionStatus
+            StartExecution  = $startExecution
+            EndExecution    = $endExecution
+            Duration        = if ($startExecution -and $endExecution) { $endExecution - $startExecution } else { $null }
+            CommandLine     = [string]$InputObject.CommandLine
+            Output          = $output
         }
     }
 }

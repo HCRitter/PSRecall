@@ -13,7 +13,4 @@ foreach ($script in @($privateScripts) + @($publicScripts)) {
     }
 }
 
-Export-ModuleMember -Function @(
-    'Export-PSRecall'
-    'Get-PSRecall'
-)
+Export-ModuleMember -Function @('Export-PSRecall', 'Get-PSRecall')
