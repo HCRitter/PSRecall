@@ -33,6 +33,13 @@ function ConvertTo-PSRecallEntry {
             $null
         }
 
+        $exportOptions = if ($null -ne $InputObject.PSObject.Properties['ExportOptions']) {
+            $InputObject.ExportOptions
+        }
+        else {
+            $null
+        }
+
         [pscustomobject]@{
             PSTypeName      = 'PSRecall.HistoryEntry'
             Id              = [long]$InputObject.Id
@@ -47,6 +54,7 @@ function ConvertTo-PSRecallEntry {
             }
             CommandLine     = [string]$InputObject.CommandLine
             Output          = $output
+            ExportOptions   = $exportOptions
         }
     }
 }
